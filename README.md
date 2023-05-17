@@ -1,130 +1,107 @@
-# ws2812-spi
-This module contains python routines to program the WS2812 RGB LED chips on the raspberry,
-using the hardware SPI MOSI (so no other hardware is needed)
+# ws2812conrtoller.py
 
-As the WS2812 communication needs strict timing, the DIN line cannot be driven from
-a normal GPIO line with python (an interrupt on the raspberry would screw things up).
-Thats' why this module uses the hardware SPI MOSI line, this does confirm to the
-timing requirements.
+A simple python class that uses a NumPy array control the WS2812 RGB LED chips on the OrangePi using the hardware SPI MOSI (so no other hardware is needed). </p>
 
-More info on the WS2812: https://wp.josh.com/2014/05/13/ws2812-neopixels-are-not-so-finicky-once-you-get-to-know-them/
+### Why?
 
-# Raspberry Pi
+I wanted an easy, low overhead way of manually controlling leds. FastLED/Adafruit_NeoPixel are great at what they do, but using them to manually set colors is overkill.</p>
 
-## Wiring of WS2812-Raspberry
-Connections from the Raspberry to the WS2812:
-```
-WS2812     Raspberry
-GND   --   GND. At least one of pin 6, 9, 14, 20, 25
-DIN   --   MOSI, Pin 19, GPIO 10
-VCC   --   5V. At least one of pin 2 or 4
-```
+As the WS2812 communication needs strict timing, the DIN line cannot be driven from a normal GPIO line with python (an interrupt on the raspberry would screw things up). Thats' why this class uses the hardware SPI MOSI line, this does confirm to the timing requirements.</p>
 
-Of course the WS2812 can (should) be chained, the DOUT of the first
-connected to the DIN of the next, and so on.
-
-## Setup SPI on Raspberry
-First, enable the SPI hardware module on the SPI, using raspi-config, in
-Advanced Options / SPI, and enabling the SPI interface and the module loading:
-    sudo raspi-config
+This code was simplified from: https://github.com/mcgurk/ws2812-spi <br>
+More info on the WS2812: https://wp.josh.com/2014/05/13/ws2812-neopixels-are-not-so-finicky-once-you-get-to-know-them/ <br>
 
 
-Then, get the python spidev module:
-```
-git clone https://github.com/doceme/py-spidev.git
-cd py-spidev
-make
-make install
-```
-
-## Testing this ws2812.py module
-This module can be tested using:
-    python ws2812.py
-
-
-Sample program that uses the module:
-```
-import spidev
-import ws2812
-spi = spidev.SpiDev()
-spi.open(0,0)
-
-#write 4 WS2812's, with the following colors: red, green, blue, yellow
-ws2812.write2812(spi, [[10,0,0], [0,10,0], [0,0,10], [10,10,0]])
-```
 
 # Orange Pi
-Orange Pi Zero, Armbian_5.91_Orangepizero_Debian_buster_next_4.19.59, 31.10.2019
+Tested on: <br>
+Orange Pi 3 LTS, <br>
 
-## Install
-sudo armbian-config
-System -> Toggle hardware configuration -> spi-spidev
-
-(didn't specify SPI1, there is no pinout for SPI0, SPI0 is for flash)
-
-edit /boot/armbianEnv.txt and add "param_spidev_spi_bus=1" (skip with Orange Pi PC):
 ```
-overlays=spi-spidev usbhost2 usbhost3
-param_spidev_spi_bus=1
-```
-Now you get /dev/spidev1.0 (or /dev/spidev0.0 with Orange Pi PC).
+$ uname -a
+Linux orangepi3-lts 5.16.17-sun50iw6 #3.0.8 SMP Tue Sep 6 20:11:50 CST 2022 aarch64 GNU/Linux
+$ lsb_release -a
+No LSB modules are available.
+Distributor ID:	Debian
+Description:	Debian GNU/Linux 11 (bullseye)
+Release:	11
+Codename:	bullseye
+``` 
+</p>
+should work on most orangepi/Raspberry Pi 
 
-DIN to pin19/SPI1_MOSI/GPIO15/PA15, GND->GND, VCC->5V.
 
-/etc/udev/rules.d/50-spi.rules:
+# Python and modules
+
+
 ```
-SUBSYSTEM=="spidev", GROUP="spiuser", MODE="0660"
+sudo apt install python3-pip python3-setuptools python3-dev python3-wheel python3-numpy
+sudo pip3 install spidev
 ```
+
+# SPI SETUP
+
+
+### Enable SPI
+
+
+SPI is not enabled by default on the OrangePi.
+
+```
+sudo orangepi-config
+
+```
+
+System -> BootEnv -> spi-spidev<br>
+append the following to the end of the options
+
+
+```
+overlays=spi-spidev1
+```
+
+Save->Install->Ok(install/update bootloader)->Back->Exit<br>
+reboot<br>
+
+
+### Test
+
+check to make sure the above changes worked
+
+```
+$ ls /dev | grep spi
+
+spidev1.0
+```
+
+if output is blank, something went wrong, start again.<br>
+note: spidev[BUS_NUMBER].[DEVICE_NUMBER] bus/device numbers are used to instantiate the SPI device and can differ from my output
+
+### Allow access to spidev from userspace
+
+make a group that will have acess to spidev, and add the current user to that group:<br>
 
 ```
 sudo groupadd spiuser
 sudo adduser "$USER" spiuser
-sudo udevadm control --reload-rules
-sudo modprobe -r spidev; sudo modprobe spidev
-# logout out and login to update user group
 ```
 
-## Python and modules
+make a udev rule that will add spidev to the group:<br>
+
 ```
-sudo apt install python3-pip python3-setuptools python3-dev python3-wheel python3-numpy
-sudo pip3 install spidev
-sudo pip3 install git+https://github.com/joosteto/ws2812-spi
-sudo sed -i 's/str(err)/(str(err))/g' /usr/local/lib/python3.7/dist-packages/ws2812.py
+sudo nano /etc/udev/rules.d/50-spi.rules
 ```
 
-## Test
-```
-#!/usr/bin/env python3
-import spidev
-import ws2812
-spi = spidev.SpiDev()
-spi.open(1,0) # use spi.open(0,0) with Orange Pi PC
+add the following line to the new rule file
 
-#write 4 WS2812's, with the following colors: red, green, blue, yellow (GRB)
-ws2812.write2812(spi, [[0,10,0], [10,0,0], [0,0,10], [10,10,0]])
+```
+SUBSYSTEM=="spidev", GROUP="spiuser", MODE="0660"
 ```
 
-## Problems
+reboot
 
-### Flickering and first led is always green
-/usr/local/lib/python3.7/dist-packages/ws2812.py
 
-modify write2812_numpy4(spi,data)-function:
-```
-    tx = numpy.insert(tx, 0, 0x00) # fix first green led
-    spi.max_speed_hz = int(4/1.05e-6) # fix flickering
-    spi.writebytes(tx.tolist()) # fix flickering
-```
-or use https://github.com/mcgurk/ws2812-spi/blob/master/ws2812.py
+# Test
 
-### GRB -> RGB
-todo...
+Run one of the programs in EXAMPLES folder
 
-# Notes #
-Note: this module tries to use numpy, if available.
-Without numpy it still works, but is *really* slow (more than a second
-to update 300 LED's on a Raspberry Pi Zero).
-So, if possible, do:
-```
-sudo apt install python-numpy
-```
